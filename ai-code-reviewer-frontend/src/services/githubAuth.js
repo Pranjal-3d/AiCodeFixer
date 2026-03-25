@@ -7,12 +7,13 @@ export const loginGithub = () => {
 export const logoutGithub = async () => {
   await fetch(`${API}/auth/logout`, {
     method: "POST",
+    credentials: "include",   // ← FIXED
   });
 };
 
 export const getAuthStatus = async () => {
-  const res = await fetch(`${API}/auth/status`);
+  const res = await fetch(`${API}/auth/status`, {
+    credentials: "include",   // ← FIXED
+  });
   return res.json();
 };
-
-

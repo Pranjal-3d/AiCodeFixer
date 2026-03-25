@@ -1,4 +1,19 @@
-@import "tailwindcss";
+:root {
+  color-scheme: dark;
+  --bg: #0b0b0d;
+  --panel: #111115;
+  --panel-2: #0f0f12;
+  --border: #2a2a2f;
+  --text: #f3f4f6;
+  --muted: #a7a7ad;
+  --yellow: #f4ff00;
+  --yellow-2: #e7f500;
+  --blue: #1f6feb;
+}
+
+* {
+  box-sizing: border-box;
+}
 
 html,
 body,
@@ -6,11 +21,22 @@ body,
   margin: 0;
   padding: 0;
   min-height: 100vh;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
-    "Inter", sans-serif;
-  background-color: #020617;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
+    Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  background: var(--bg);
+  color: var(--text);
+}
+
+button,
+input {
+  font: inherit;
 }
 
 a {
+  color: inherit;
   text-decoration: none;
+}
+
+::selection {
+  background: rgba(244, 255, 0, 0.25);
 }

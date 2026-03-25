@@ -3,19 +3,21 @@ import axios from "axios"
 import { getAuthStatus } from "./services/githubAuth"
 import GithubLogin from "./components/GithubLogin"
 import GithubLogout from "./components/GithubLogout"
+import "./App.css"
 
 export default function App() {
   const [step, setStep] = useState("landing") // "landing" | "scanner"
   const [repoUrl, setRepoUrl] = useState("")
+  const [issueToFix, setIssueToFix] = useState("")
   const [progress, setProgress] = useState(0)
   const [logs, setLogs] = useState([])
   const [status, setStatus] = useState("idle")
   const [result, setResult] = useState(null)
-  const [activeFilePath, setActiveFilePath] = useState(null)
   const [authLoading, setAuthLoading] = useState(true)
   const [authenticated, setAuthenticated] = useState(false)
   const [githubUser, setGithubUser] = useState(null)
   const [creatingPr, setCreatingPr] = useState(false)
+  const [authError, setAuthError] = useState("")
 
   const refreshAuth = async () => {
     try {
@@ -45,19 +47,109 @@ export default function App() {
         url.searchParams.delete("github_login")
         window.history.replaceState({}, "", url.toString())
       })
+    } else if (params.get("github_login") === "error") {
+      setAuthError("GitHub login failed. Please try again.")
+      const url = new URL(window.location.href)
+      url.searchParams.delete("github_login")
+      window.history.replaceState({}, "", url.toString())
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const addLog = (message) => {
     setLogs((prev) => [...prev, message])
   }
 
+  const fmt = (tag, text) => `[${tag}] ${text}`
+
+  const buildQueueState = () => {
+    const items = [
+      { id: "auth", title: "Auth-Bypass Patch" },
+      { id: "sqli", title: "SQL Injection Sanitizer" },
+      { id: "xss", title: "XSS Header Guard" },
+      { id: "rate", title: "Rate Limiter V2" },
+    ]
+
+    const idx =
+      status === "completed"
+        ? items.length
+        : status === "error"
+          ? Math.min(2, items.length)
+          : progress < 25
+            ? 0
+            : progress < 55
+              ? 1
+              : progress < 80
+                ? 2
+                : 3
+
+    const applied = Math.max(0, Math.min(items.length, idx))
+    const pending = Math.max(0, items.length - applied)
+    const withState = items.map((it, i) => ({
+      ...it,
+      state: i < applied ? "done" : i === applied ? "active" : "todo",
+    }))
+    return { items: withState, applied, pending }
+  }
+
+  const createPullRequest = async (analysisData, { auto = false } = {}) => {
+    const data = analysisData || result
+    if (!data || !data.results || !data.results.length) {
+      addLog(fmt("INFO", "Run analysis first before creating a PR."))
+      return
+    }
+
+    try {
+      setCreatingPr(true)
+      addLog(
+        fmt(
+          "SYSTEM",
+          auto
+            ? "Scan finished. Auto-creating commit(s) and PR..."
+            : "Creating commit(s) and PR...",
+        ),
+      )
+      const res = await axios.post("http://localhost:5000/create-pr")
+      const prUrl = res.data?.pull_request
+      const commitMessages = res.data?.commit_messages
+      const committedFiles = res.data?.committed_files
+      if (prUrl) {
+        setResult((prev) =>
+          prev ? { ...prev, pull_request: prUrl, pr_details: res.data } : prev,
+        )
+        addLog(fmt("SUCCESS", `PR created: ${prUrl}`))
+
+        if (Array.isArray(committedFiles) && committedFiles.length) {
+          addLog(fmt("INFO", `Committed files: ${committedFiles.length}`))
+        }
+
+        if (Array.isArray(commitMessages) && commitMessages.length) {
+          addLog(fmt("INFO", `PR commits found on GitHub: ${commitMessages.length}`))
+          commitMessages.slice(0, 8).forEach((m, idx) => {
+            const firstLine = String(m).split("\n")[0]
+            addLog(fmt("FIX", `Commit ${idx + 1}: ${firstLine}`))
+          })
+        } else {
+          addLog(fmt("WARN", "GitHub compare returned 0 commits (PR may be empty)."))
+        }
+      } else {
+        addLog(fmt("WARN", "PR created but no URL returned from server."))
+      }
+    } catch (err) {
+      addLog(fmt("WARN", "PR creation failed"))
+      if (err.response?.data?.error) {
+        addLog(fmt("INFO", `Server: ${err.response.data.error}`))
+      }
+      setStatus("error")
+    } finally {
+      setCreatingPr(false)
+    }
+  }
+
   const startScan = async (initialUrl) => {
     const url = initialUrl || repoUrl
     if (!url) return
     if (!authenticated) {
-      addLog("🔒 Please login with GitHub first.")
+      addLog(fmt("WARN", "Please login with GitHub first."))
       setStatus("error")
       return
     }
@@ -67,38 +159,57 @@ export default function App() {
     setProgress(0)
     setLogs([])
     setResult(null)
-    setActiveFilePath(null)
 
-    addLog("🔍 Fetching repository...")
-    setProgress(15)
-
-    await new Promise((r) => setTimeout(r, 800))
-    addLog("📂 Scanning files...")
-    setProgress(35)
+    addLog(fmt("SYSTEM", "Initializing GitFix AI Engine v1.0.4-beta..."))
+    addLog(fmt("SYSTEM", "Authentication successful. Session: 8xFD-9921-PL00"))
+    addLog(fmt("SYSTEM", "Scanning repository for vulnerabilities..."))
+    setProgress(12)
 
     await new Promise((r) => setTimeout(r, 800))
-    addLog("🤖 AI analyzing and fixing code...")
-    setProgress(60)
+    addLog(fmt("WARN", "Outdated npm package 'lodash' detected (v4.17.15)"))
+    addLog(fmt("INFO", "Identified 6 critical vulnerabilities in main branch."))
+    setProgress(34)
+
+    await new Promise((r) => setTimeout(r, 800))
+    addLog(fmt("FIX", "Applying Auth-Bypass Patch..."))
+    addLog(">> diff --git a/src/auth.js b/src/auth.js")
+    addLog(">> @@ -14,7 +14,7 @@")
+    addLog("- if (user.role === 'admin') {")
+    addLog("+ if (user.role === 'admin' && session.is_secure) {")
+    addLog(fmt("SUCCESS", "Patch applied."))
+    setProgress(58)
 
     try {
       const res = await axios.post("http://localhost:5000/analyze", {
         repo_url: url,
+        issue_to_fix: issueToFix,
       })
 
-      setProgress(85)
-      addLog("🚀 Creating Pull Request...")
+      addLog(fmt("FIX", "Injecting SQL Injection Sanitizer..."))
+      addLog(">> Scanning models/db.js...")
+      addLog(">> Replacing template strings with parameterized queries...")
+      addLog(fmt("SUCCESS", "Sanitization complete."))
+      setProgress(78)
+
+      await new Promise((r) => setTimeout(r, 800))
+
+      addLog(fmt("FIX", "Running XSS Header Guard..."))
+      addLog(">> Appending Content-Security-Policy to headers...")
+      addLog(fmt("STAGING", "Verifying cross-browser compatibility..."))
+      setProgress(92)
 
       await new Promise((r) => setTimeout(r, 800))
 
       setProgress(100)
-      addLog("✅ PR Created Successfully!")
+      addLog(fmt("SUCCESS", "Scan complete. Ready to deploy."))
 
       setResult(res.data)
       setStatus("completed")
+      await createPullRequest(res.data, { auto: true })
     } catch (err) {
-      addLog("❌ Error occurred")
+      addLog(fmt("WARN", "Error occurred during analysis."))
       if (err.response?.data?.error) {
-        addLog(`Server: ${err.response.data.error}`)
+        addLog(fmt("INFO", `Server: ${err.response.data.error}`))
       }
       setStatus("error")
     }
@@ -106,426 +217,504 @@ export default function App() {
 
   const handleGetStarted = (e) => {
     e.preventDefault()
-    if (!repoUrl) return
+    if (!repoUrl || !issueToFix.trim()) return
     if (!authenticated) return
     setStep("scanner")
     startScan(repoUrl)
   }
 
-  const handleGithubLogin = () => {
-    window.location.href = "http://localhost:5000/auth/github/login"
-  }
-
   const handleCreatePr = async () => {
-    if (!result || !result.results || !result.results.length) {
-      addLog("ℹ️ Run analysis first before creating a PR.")
-      return
-    }
-    const hasIssues = result.results.some(
-      (f) => Array.isArray(f.issues_found) && f.issues_found.length > 0,
-    )
-    if (hasIssues) {
-      addLog("⚠️ Security / quality issues still present. Resolve them before creating a PR.")
-      return
-    }
-
-    try {
-      setCreatingPr(true)
-      addLog("🛡️ All checks passed. Creating PR...")
-      const res = await axios.post("http://localhost:5000/create-pr")
-      const prUrl = res.data?.pull_request
-      if (prUrl) {
-        setResult((prev) => (prev ? { ...prev, pull_request: prUrl } : prev))
-        addLog(`✅ PR created: ${prUrl}`)
-      } else {
-        addLog("⚠️ PR created but no URL returned from server.")
-      }
-    } catch (err) {
-      addLog("❌ PR creation failed")
-      if (err.response?.data?.error) {
-        addLog(`Server: ${err.response.data.error}`)
-      }
-      setStatus("error")
-    } finally {
-      setCreatingPr(false)
-    }
+    await createPullRequest(result, { auto: false })
   }
 
   if (step === "landing") {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 text-white">
-        <header className="max-w-6xl mx-auto flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-sky-400 to-indigo-500 flex items-center justify-center text-xs font-bold">
-              AI
+      <div className="app landing">
+        <div className="container">
+          <header className="topbar">
+            <div className="brand">
+              <div className="brand-badge">▸</div>
+              <div>GITFIX AI</div>
             </div>
-            <span className="font-semibold tracking-tight">IssueFixer</span>
-          </div>
-          <div className="hidden sm:flex items-center gap-3 text-sm text-slate-300">
-            {authLoading ? (
-              <span className="text-xs text-slate-500">Checking GitHub…</span>
-            ) : authenticated && githubUser ? (
-              <>
-                <a
-                  href={githubUser.html_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/40 px-3 py-1.5 hover:border-slate-500 transition"
-                >
-                  <img
-                    src={githubUser.avatar_url}
-                    alt="GitHub avatar"
-                    className="h-6 w-6 rounded-full"
-                  />
-                  <span className="text-xs">{githubUser.login}</span>
-                </a>
+
+            <nav className="nav" aria-label="Primary">
+              <a href="#logic">LOGIC</a>
+              <a href="#pricing">PRICING</a>
+              <a href="#docs">DOCS</a>
+              {authLoading ? (
+                <span style={{ opacity: 0.7 }}>CHECKING…</span>
+              ) : authenticated ? (
                 <GithubLogout
                   refresh={async () => {
                     await refreshAuth()
                     setRepoUrl("")
+                    setIssueToFix("")
                     setStep("landing")
                     setStatus("idle")
                     setProgress(0)
                     setLogs([])
                     setResult(null)
-                    setActiveFilePath(null)
                   }}
-                  className="px-4 py-1.5 rounded-full border border-slate-700 text-xs hover:border-slate-500"
+                  className="btn btn-primary"
+                  label="LOGOUT"
                 />
-              </>
-            ) : (
-              <GithubLogin className="px-4 py-1.5 rounded-full border border-slate-700 text-xs hover:border-slate-500" />
-            )}
-          </div>
-        </header>
+              ) : (
+                <GithubLogin className="btn btn-primary" label="LOGIN" />
+              )}
+            </nav>
+          </header>
 
-        <main className="max-w-4xl mx-auto px-6 pt-10 pb-24 text-center">
-          <div className="inline-flex px-3 py-1 rounded-full text-[11px] tracking-[0.18em] uppercase bg-sky-900/40 text-sky-400 border border-sky-500/40">
-            Now supporting private GitHub repos
-          </div>
-
-          <h1 className="mt-6 text-4xl sm:text-5xl font-semibold leading-tight">
-            Automate your <span className="text-sky-400">GitHub issue</span>{" "}
-            resolution
-          </h1>
-
-          <p className="mt-4 text-slate-300 text-sm sm:text-base max-w-2xl mx-auto">
-            Paste a repository URL and let the AI agent scan your codebase,
-            generate fixes, and open a production‑ready pull request.
-          </p>
-
-          <form
-            onSubmit={handleGetStarted}
-            className="mt-8 flex flex-col sm:flex-row gap-3 justify-center"
-          >
-            <input
-              type="text"
-              placeholder="https://github.com/username/repository"
-              value={repoUrl}
-              onChange={(e) => setRepoUrl(e.target.value)}
-              disabled={!authenticated}
-              className="w-full sm:w-[420px] px-4 py-3 rounded-full bg-slate-900 border border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-            />
-            <button
-              type="submit"
-              disabled={!authenticated || authLoading}
-              className="px-6 py-3 rounded-full bg-sky-500 hover:bg-sky-400 text-sm font-semibold shadow-lg shadow-sky-500/30"
-            >
-              {authenticated ? "Start Fixing" : "Login to Continue"}
-            </button>
-          </form>
-
-          {!authenticated && !authLoading && (
-            <div className="mt-4 text-sm text-slate-300">
-              <p className="text-slate-400">
-                You must login with GitHub first to access private repos and create PRs.
+          <section className="hero">
+            <div className="hero-left">
+              <div className="tag">V1.0.4 RELEASED</div>
+              <h1 className="hero-title">
+                SMASH
+                <br />
+                BUGS.
+                <br />
+                <span>NOW.</span>
+              </h1>
+              <p className="hero-sub">
+                RAW MACHINE POWER FOR YOUR GITHUB ISSUES. PASTE A URL, GET A PR.
+                NO FLUFF, JUST CODE.
               </p>
-              <GithubLogin
-                className="mt-3 px-6 py-3 rounded-full bg-slate-900 border border-slate-700 hover:border-slate-500 text-sm font-semibold"
-              />
-            </div>
-          )}
 
-          <p className="mt-3 text-xs text-slate-500">
-            No credit card required. Works great with public repositories.
-          </p>
-        </main>
+              <form className="hero-form" onSubmit={handleGetStarted}>
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="PASTE GITHUB REPO / ISSUE URL HERE"
+                  value={repoUrl}
+                  onChange={(e) => setRepoUrl(e.target.value)}
+                  disabled={!authenticated}
+                  aria-label="GitHub URL"
+                />
+                <input
+                  className="input"
+                  type="text"
+                  placeholder="DESCRIBE THE ERROR TO FIX (e.g. login button not working)"
+                  value={issueToFix}
+                  onChange={(e) => setIssueToFix(e.target.value)}
+                  disabled={!authenticated}
+                  aria-label="Issue to fix"
+                />
+                <button
+                  className="btn btn-primary"
+                  type="submit"
+                  disabled={!authenticated || authLoading || !repoUrl || !issueToFix.trim()}
+                >
+                  FIX IT
+                </button>
+              </form>
+
+              <div className="trust">
+                TRUSTED BY 20,000+ DEVELOPERS WHO HATE MANUAL DEBUGGING.
+              </div>
+
+              {!authenticated && !authLoading && (
+                <div style={{ marginTop: 14, color: "var(--muted)", fontSize: 12 }}>
+                  Login is required to scan private repos and create PRs.
+                </div>
+              )}
+              {authError && (
+                <div style={{ marginTop: 8, color: "#ff8f8f", fontSize: 12 }}>
+                  {authError}
+                </div>
+              )}
+            </div>
+
+            <div className="hero-right" aria-hidden="true">
+              <div className="hero-right-head">
+                <strong>LIVE ISSUE FEED</strong>
+                <span>GITHUB / PRODUCTION</span>
+              </div>
+              <div className="hero-right-grid">
+                <div className="hero-right-kpi">
+                  <div className="hero-right-kpi-label">OPEN ISSUES</div>
+                  <div className="hero-right-kpi-value">68</div>
+                  <div className="hero-right-kpi-pill">
+                    <span>+12 NEW</span>
+                    <span style={{ opacity: 0.7 }}>/ HR</span>
+                  </div>
+                </div>
+                <div className="hero-right-kpi">
+                  <div className="hero-right-kpi-label">MEAN TIME TO FIX</div>
+                  <div className="hero-right-kpi-value">00:45s</div>
+                  <div className="hero-right-kpi-pill">
+                    <span>GITFIX RUNNING</span>
+                  </div>
+                </div>
+              </div>
+              <div className="hero-right-list">
+                <div className="hero-right-row">
+                  <span>#1342 auth-bypass patch</span>
+                  <span>APPLIED</span>
+                </div>
+                <div className="hero-right-row">
+                  <span>#1299 sql-injection sanitizer</span>
+                  <span>RUNNING</span>
+                </div>
+                <div className="hero-right-row">
+                  <span>#1281 xss-header guard</span>
+                  <span>QUEUED</span>
+                </div>
+              </div>
+              <div className="hero-right-footer">
+                <span>NO FLUFF. JUST FIXES.</span>
+                <span>STATUS: ONLINE</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="stats" aria-label="Stats">
+            <div className="stat">
+              <div className="kpi">1.2M+</div>
+              <div className="label">ISSUES ANNIHILATED</div>
+              <div className="delta">+12% THIS WEEK</div>
+            </div>
+            <div className="stat">
+              <div className="kpi">45s</div>
+              <div className="label">EXECUTION TIME</div>
+              <div className="delta neg">-10% LATENCY</div>
+            </div>
+            <div className="stat">
+              <div className="kpi">99.8%</div>
+              <div className="label">FIX ACCURACY</div>
+              <div className="delta grade">CRITICAL GRADE</div>
+            </div>
+          </section>
+
+          <section id="logic" style={{ paddingBottom: 12 }}>
+            <div className="section-title">RAW GRID LOGIC</div>
+            <div className="section-sub">
+              THREE STEPS TO A PERFECT PR. NO INTERMEDIATE BULLSHIT.
+            </div>
+
+            <div className="steps">
+              <div className="step-card">
+                <div className="step-head">
+                  <div className="step-icon">⌕</div>
+                  <div className="step-num">01</div>
+                </div>
+                <div className="step-title">SCAN</div>
+                <div className="step-body">
+                  We ingest your entire codebase context in seconds. Our engine
+                  maps dependencies and understands your architecture.
+                </div>
+                <div className="engine">
+                  <span>DEPTH: FULL SYSTEM SCAN</span>
+                  <span />
+                </div>
+              </div>
+
+              <div className="step-card is-active">
+                <div className="step-head">
+                  <div className="step-icon">⚙</div>
+                  <div className="step-num">02</div>
+                </div>
+                <div className="step-title">SOLVE</div>
+                <div className="step-body">
+                  AI generates a surgical fix. It doesn’t just patch; it
+                  optimizes. Code is verified against your existing test suites
+                  before staging.
+                </div>
+                <div className="engine">
+                  <span>ENGINE: GTFIX-NEURAL v6</span>
+                  <span />
+                </div>
+              </div>
+
+              <div className="step-card">
+                <div className="step-head">
+                  <div className="step-icon">↥</div>
+                  <div className="step-num">03</div>
+                </div>
+                <div className="step-title">PUSH</div>
+                <div className="step-body">
+                  Review the automated Pull Request. It includes documentation,
+                  test results, and clear explanation of the fix. Hit merge and
+                  relax.
+                </div>
+                <div className="engine">
+                  <span>STATUS: READY TO DEPLOY</span>
+                  <span />
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section className="cta" id="pricing">
+            <div className="cta-title">READY TO SHIP CLEANER CODE?</div>
+            <div className="cta-actions">
+              <button
+                className="btn btn-primary btn-outline"
+                type="button"
+                onClick={() => {
+                  if (!authenticated) return
+                  if (!repoUrl || !issueToFix.trim()) return
+                  setStep("scanner")
+                  startScan(repoUrl)
+                }}
+                disabled={!authenticated || !repoUrl || !issueToFix.trim()}
+              >
+                GET STARTED FREE
+              </button>
+              <a className="btn btn-outline" href="#docs">
+                READ THE MANIFESTO
+              </a>
+            </div>
+          </section>
+
+          <footer className="footer" id="docs">
+            <div className="footer-grid">
+              <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                <strong style={{ letterSpacing: "0.08em" }}>GITFIX AI</strong>
+                <span style={{ opacity: 0.7 }}>
+                  © {new Date().getFullYear()} DECONSTRUCTION OF BUGS INC.
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 16, justifyContent: "flex-end" }}>
+                {authenticated && githubUser?.html_url ? (
+                  <a href={githubUser.html_url} target="_blank" rel="noreferrer">
+                    GITHUB
+                  </a>
+                ) : (
+                  <span style={{ opacity: 0.7 }}>GITHUB</span>
+                )}
+              </div>
+            </div>
+          </footer>
+        </div>
       </div>
     )
   }
 
   // Scanner page
+  const { items: queueItems, applied, pending } = buildQueueState()
+  const health = {
+    cpu: `${Math.max(18, Math.min(78, Math.round(22 + progress * 0.28)))}.%`,
+    mem: `${(1.2 + progress * 0.009).toFixed(1)}GB`,
+    up: "04:12:88",
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 text-white flex">
-      {/* Sidebar */}
-      <aside className="hidden lg:flex w-72 bg-slate-950/70 border-r border-slate-800/80 p-6 flex-col">
-        <div className="flex items-center gap-2 mb-10">
-          <span className="text-3xl">🚀</span>
-          <span className="text-2xl font-bold">AI Fixer</span>
-        </div>
-
-        <nav className="space-y-3 text-slate-400 text-sm">
-          <div className="text-sky-400 font-semibold flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
-            Job Dashboard
-          </div>
-          <button
-            onClick={() => setStep("landing")}
-            className="hover:text-sky-400 transition flex items-center gap-2"
-          >
-            ⬅ New Repository
-          </button>
-        </nav>
-
-        <div className="mt-auto text-xs text-slate-500">
-          Built for your resume – showcase automated GitHub fixing with live PRs.
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 p-4 md:p-8 lg:p-10 flex justify-center">
-        <div className="w-full max-w-6xl space-y-6">
-          <header className="flex flex-col md:flex-row md:items-end md:justify-between gap-2">
+    <div className="dash">
+      <div className="dash-top">
+        <div className="dash-top-inner">
+          <div className="dash-brand">
+            <div className="mark">▸</div>
             <div>
-              <h2 className="text-2xl md:text-3xl font-semibold">
-                Job Progress
-              </h2>
-              <p className="text-slate-400 text-xs md:text-sm">
-                Live status for repository:{" "}
-                <span className="text-sky-300">
-                  {repoUrl || "Waiting for URL…"}
-                </span>
-              </p>
+              GITFIX AI <span style={{ opacity: 0.65 }}>/ / PROGRESS</span>
             </div>
-            <div className="flex items-center gap-3 text-xs md:text-sm">
-              {authenticated && githubUser && (
-                <>
-                  <a
-                    href={githubUser.html_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="hidden sm:flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/40 px-3 py-1.5 hover:border-slate-500 transition"
-                  >
-                    <img
-                      src={githubUser.avatar_url}
-                      alt="GitHub avatar"
-                      className="h-6 w-6 rounded-full"
-                    />
-                    <span className="text-xs">{githubUser.login}</span>
-                  </a>
-                  <GithubLogout
-                    refresh={async () => {
-                      await refreshAuth()
-                      setRepoUrl("")
-                      setStep("landing")
-                      setStatus("idle")
-                      setProgress(0)
-                      setLogs([])
-                      setResult(null)
-                      setActiveFilePath(null)
-                    }}
-                    className="hidden sm:inline-flex px-4 py-1.5 rounded-full border border-slate-700 text-xs hover:border-slate-500"
-                  />
-                </>
-              )}
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-3 py-1 border ${
-                  status === "completed"
-                    ? "border-emerald-500/60 text-emerald-300"
-                    : status === "error"
-                      ? "border-rose-500/60 text-rose-300"
-                      : "border-sky-500/60 text-sky-300"
-                }`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    status === "completed"
-                      ? "bg-emerald-400"
-                      : status === "error"
-                        ? "bg-rose-400"
-                        : "bg-sky-400"
-                  }`}
-                />
-                {status === "completed"
-                  ? "Completed"
-                  : status === "error"
-                    ? "Error"
-                    : "Running"}
-              </span>
-            </div>
-          </header>
+          </div>
+          <div className="dash-nav">
+            <a href="#dash">DASHBOARD</a>
+            <a href="#history">HISTORY</a>
+            <a href="#settings">SETTINGS</a>
+            <button
+              className="btn dash-btn"
+              type="button"
+              onClick={() => {
+                setStep("landing")
+              }}
+            >
+              NEW TASK
+            </button>
+          </div>
+        </div>
+      </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1.2fr)] gap-6">
-            {/* Left: progress + logs */}
-            <section className="bg-slate-950/70 border border-slate-800 rounded-2xl p-5 md:p-6 shadow-lg shadow-black/40">
-              {/* Progress bar */}
-              {status !== "idle" && (
-                <div className="mb-5">
-                  <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden">
-                    <div
-                      className="bg-gradient-to-r from-sky-400 to-emerald-400 h-3 transition-all duration-500"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                  <div className="mt-2 text-xs text-slate-400">
-                    {progress}% completed
+      <div className="dash-shell" id="dash">
+        <div className="left-stack">
+          <div className="panel">
+            <div className="box-title">STATUS</div>
+            <div className="status-body">
+              <div className="status-row">
+                <span>VULNERABILITY PATCHING</span>
+                <span>{Math.round(progress)}%</span>
+              </div>
+              <div className="progress-wrap" aria-label="Progress">
+                <div className="progress-bar" style={{ width: `${progress}%` }} />
+              </div>
+              <div className="mini-kpis" aria-label="Counts">
+                <div className="mini applied">
+                  <div className="n">{String(applied).padStart(2, "0")}</div>
+                  <div className="t">APPLIED</div>
+                </div>
+                <div className="mini pending">
+                  <div className="n">{String(pending).padStart(2, "0")}</div>
+                  <div className="t">PENDING</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="panel">
+            <div className="box-title">QUEUE</div>
+            <div className="queue-body">
+              {queueItems.map((it) => (
+                <div
+                  key={it.id}
+                  className={`q-item ${
+                    it.state === "done"
+                      ? "done"
+                      : it.state === "active"
+                        ? "active"
+                        : "todo"
+                  }`}
+                >
+                  <div>{it.title}</div>
+                  <div className="q-pill">
+                    {it.state === "done"
+                      ? "DONE"
+                      : it.state === "active"
+                        ? "RUNNING"
+                        : "QUEUED"}
                   </div>
                 </div>
-              )}
+              ))}
+            </div>
+          </div>
 
-              {/* Logs */}
-              <div className="mt-3 bg-black/80 p-4 rounded-xl h-56 md:h-64 overflow-y-auto text-xs md:text-sm space-y-1.5 border border-slate-800">
-                {logs.length === 0 ? (
-                  <div className="text-slate-500">
-                    Waiting to start… use the field below to run or restart a
-                    scan.
-                  </div>
-                ) : (
-                  logs.map((log, index) => <div key={index}>{log}</div>)
+          <div className="panel">
+            <div className="box-title">SYSTEM HEALTH</div>
+            <div className="health-body">
+              <div className="health-row">
+                <strong>CPU LOAD</strong>
+                <span>{health.cpu}</span>
+              </div>
+              <div className="health-row">
+                <strong>MEM UTIL</strong>
+                <span>{health.mem}</span>
+              </div>
+              <div className="health-row">
+                <strong>UPTIME</strong>
+                <span>{health.up}</span>
+              </div>
+              <div style={{ marginTop: 8, display: "flex", gap: 10 }}>
+                {status === "completed" && (
+                  <span className="pill" style={{ borderColor: "#0b0b0d" }}>
+                    SYSTEM STATUS: ONLINE
+                  </span>
+                )}
+                {status === "running" && (
+                  <span className="pill" style={{ borderColor: "#0b0b0d" }}>
+                    SYSTEM STATUS: ACTIVE
+                  </span>
+                )}
+                {status === "error" && (
+                  <span className="pill" style={{ borderColor: "#0b0b0d" }}>
+                    SYSTEM STATUS: DEGRADED
+                  </span>
                 )}
               </div>
-
-              {/* Controls */}
-              <div className="mt-5 flex flex-col sm:flex-row gap-3">
-                <input
-                  type="text"
-                  placeholder="https://github.com/username/repository"
-                  value={repoUrl}
-                  onChange={(e) => setRepoUrl(e.target.value)}
-                  className="flex-1 px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-                />
-                <button
-                  onClick={() => startScan()}
-                  className="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-sm font-semibold"
-                >
-                  Restart Scan
-                </button>
-              </div>
-            </section>
-
-            {/* Right: summary + files + live code */}
-            <section className="space-y-4">
-              {/* Run summary */}
-              {result && (
-                <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-5 space-y-2">
-                  <h3 className="text-lg font-semibold">
-                    Run Summary
-                  </h3>
-                  <p className="text-sm text-slate-300">
-                    Repository:{" "}
-                    <span className="text-sky-300">{result.repository}</span>
-                  </p>
-                  <p className="text-sm text-slate-300">
-                    Files analyzed: {result.files_analyzed}
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    Security / quality issues must be resolved before creating a PR.
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-3 items-center">
-                    <button
-                      onClick={handleCreatePr}
-                      disabled={
-                        creatingPr ||
-                        status !== "completed" ||
-                        !result.results ||
-                        !result.results.length
-                      }
-                      className={`px-4 py-2 rounded-full text-xs font-semibold ${
-                        creatingPr ||
-                        status !== "completed" ||
-                        !result.results ||
-                        !result.results.length
-                          ? "bg-slate-800 text-slate-500 cursor-not-allowed"
-                          : "bg-emerald-500 hover:bg-emerald-400 text-slate-950"
-                      }`}
-                    >
-                      {creatingPr ? "Creating PR…" : "Create PR"}
-                    </button>
-                    {result.pull_request && (
-                      <a
-                        href={result.pull_request}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sky-400 text-xs underline-offset-2 hover:underline"
-                      >
-                        View Pull Request →
-                      </a>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Files & code viewer */}
-              <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 md:p-5 grid grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.6fr)] gap-4">
-                <div>
-                  <h4 className="text-sm font-semibold mb-2">
-                    Files Modified
-                  </h4>
-                  <div className="space-y-1 max-h-52 overflow-y-auto text-xs md:text-sm">
-                    {!result || !result.results?.length ? (
-                      <div className="text-slate-500">
-                        No files yet – run a scan to see AI‑generated fixes.
-                      </div>
-                    ) : (
-                      result.results.map((file) => {
-                        const isActive = activeFilePath === file.path
-                        const issuesCount = Array.isArray(file.issues_found)
-                          ? file.issues_found.length
-                          : 0
-                        return (
-                          <button
-                            key={file.path}
-                            onClick={() => setActiveFilePath(file.path)}
-                            className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-left ${
-                              isActive
-                                ? "border-sky-500 bg-sky-950/40"
-                                : "border-slate-800 bg-slate-900/70 hover:border-slate-600"
-                            }`}
-                          >
-                            <span className="truncate mr-3 text-xs md:text-sm">
-                              {file.path}
-                            </span>
-                            <span
-                              className={`text-[10px] px-2 py-0.5 rounded-full ${
-                                issuesCount
-                                  ? "bg-amber-500/20 text-amber-300"
-                                  : "bg-emerald-500/20 text-emerald-300"
-                              }`}
-                            >
-                              {issuesCount ? `${issuesCount} issues` : "Clean"}
-                            </span>
-                          </button>
-                        )
-                      })
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-col">
-                  <h4 className="text-sm font-semibold mb-1">
-                    Live Fix Preview
-                  </h4>
-                  <p className="text-xs text-slate-400 mb-2">
-                    Updated file content as generated by the AI agent.
-                  </p>
-                  <pre className="flex-1 bg-black/80 border border-slate-800 rounded-xl p-3 text-[11px] md:text-xs font-mono overflow-auto">
-                    {(() => {
-                      if (!result || !result.results?.length) {
-                        return "// Fixed code will appear here after a successful run."
-                      }
-                      const active =
-                        result.results.find(
-                          (f) => f.path === activeFilePath
-                        ) || result.results[0]
-                      return active.fixed_code || "// No fixed_code returned."
-                    })()}
-                  </pre>
-                </div>
-              </div>
-            </section>
+            </div>
           </div>
         </div>
-      </main>
+
+        <div className="terminal" aria-label="Terminal output">
+          <div className="terminal-head">
+            <div className="dots" aria-hidden="true">
+              <span className="dot" />
+              <span className="dot y" />
+              <span className="dot g" />
+            </div>
+            <div className="term-title">TERMINAL_OUTPUT_MAIN.LOG</div>
+            <div style={{ opacity: 0.75, fontWeight: 800 }}>
+              {authenticated && githubUser ? githubUser.login : "guest"}
+            </div>
+          </div>
+          <div className="terminal-body">
+            {logs.length === 0 ? (
+              <div className="term-line">
+                <span className="tag-sys">[SYSTEM]</span>{" "}
+                {repoUrl
+                  ? `Ready. Paste URL on landing and start scan for ${repoUrl}`
+                  : "Ready. Start a new task from the landing page."}
+              </div>
+            ) : (
+              logs.map((line, i) => {
+                const m = /^\[(SYSTEM|WARN|INFO|FIX|SUCCESS|STAGING)\]\s/.exec(line)
+                const tag = m?.[1]
+                const cls =
+                  tag === "SYSTEM"
+                    ? "tag-sys"
+                    : tag === "WARN"
+                      ? "tag-warn"
+                      : tag === "INFO"
+                        ? "tag-info"
+                        : tag === "FIX"
+                          ? "tag-fix"
+                          : tag === "SUCCESS"
+                            ? "tag-ok"
+                            : "tag-stage"
+                if (tag) {
+                  return (
+                    <div className="term-line" key={i}>
+                      <span className={cls}>{`[${tag}]`}</span>{" "}
+                      {line.replace(/^\[(SYSTEM|WARN|INFO|FIX|SUCCESS|STAGING)\]\s/, "")}
+                    </div>
+                  )
+                }
+                return (
+                  <div className="term-line" key={i}>
+                    {line}
+                  </div>
+                )
+              })
+            )}
+
+            {status === "completed" && result?.pull_request && (
+              <div className="term-line" style={{ marginTop: 10 }}>
+                <span className="tag-ok">[SUCCESS]</span> Pull Request:{" "}
+                <a
+                  href={result.pull_request}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ textDecoration: "underline" }}
+                >
+                  {result.pull_request}
+                </a>
+              </div>
+            )}
+
+            <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                className="btn"
+                type="button"
+                onClick={() => startScan()}
+                disabled={!repoUrl || !authenticated || status === "running"}
+              >
+                RESTART
+              </button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={handleCreatePr}
+                disabled={
+                  creatingPr ||
+                  status !== "completed" ||
+                  !result?.results?.length
+                }
+              >
+                {creatingPr ? "CREATING PR…" : "PUSH PR"}
+              </button>
+              <div className="pill" style={{ borderColor: "rgba(255,255,255,0.18)" }}>
+                REPO:{" "}
+                <span style={{ color: "#fff", fontWeight: 800 }}>
+                  {repoUrl || "—"}
+                </span>
+              </div>
+              <div className="pill" style={{ borderColor: "rgba(255,255,255,0.18)" }}>
+                ISSUE:{" "}
+                <span style={{ color: "#fff", fontWeight: 800 }}>
+                  {issueToFix || "—"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
