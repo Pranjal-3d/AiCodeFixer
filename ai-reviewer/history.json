@@ -1,0 +1,223 @@
+[
+  {
+    "owner": "Pranjal-3d",
+    "repo": "SIH-bluecarbon-backend",
+    "branch": "main",
+    "path": "config/db.js",
+    "summary": "The route for connecting to the database has been changed to use a different URI.",
+    "issues_found": [],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T20:13:00.219Z"
+  },
+  {
+    "owner": "Pranjal-3d",
+    "repo": "SIH-bluecarbon-backend",
+    "branch": "main",
+    "path": "config/setupCollection.js",
+    "summary": "Changed the route for importing models to a relative path.",
+    "issues_found": [],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T20:13:00.219Z"
+  },
+  {
+    "owner": "Pranjal-3d",
+    "repo": "SIH-bluecarbon-backend",
+    "branch": "main",
+    "path": "controllers/adminController.js",
+    "summary": "Fixed the route for the Project model import.",
+    "issues_found": [
+      "Incorrect model import for Project."
+    ],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T20:13:00.219Z"
+  },
+  {
+    "owner": "Pranjal-3d",
+    "repo": "SIH-bluecarbon-backend",
+    "branch": "main",
+    "path": "controllers/blockchainController.js",
+    "summary": "Changed the route for registering a project on the blockchain.",
+    "issues_found": [],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T20:13:00.219Z"
+  },
+  {
+    "owner": "Pranjal-3d",
+    "repo": "SIH-bluecarbon-backend",
+    "branch": "main",
+    "path": "controllers/dappController.js",
+    "summary": "Fixed the route in the dappController.js file.",
+    "issues_found": [],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T20:13:00.219Z"
+  },
+  {
+    "owner": "Pranjal-3d",
+    "repo": "HealthCare_backened",
+    "branch": "main",
+    "path": "authentication/__init__.py",
+    "summary": "The file is empty and requires implementation.",
+    "issues_found": [
+      "The file 'authentication/__init__.py' is empty and does not contain any code."
+    ],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T19:28:31.159Z"
+  },
+  {
+    "owner": "Pranjal-3d",
+    "repo": "HealthCare_backened",
+    "branch": "main",
+    "path": "authentication/apps.py",
+    "summary": "The code is correct and follows Django's AppConfig structure.",
+    "issues_found": [],
+    "has_fix": false,
+    "analyzed_at": "2026-03-25T19:28:31.159Z"
+  },
+  {
+    "owner": "Pranjal-3d",
+    "repo": "HealthCare_backened",
+    "branch": "main",
+    "path": "authentication/serializers.py",
+    "summary": "The code is mostly correct, but it is missing the 'username' field in the 'fields' list of the RegisterSerializer. Additionally, the 'first_name' should be set correctly in the User model.",
+    "issues_found": [
+      "Missing 'username' field in RegisterSerializer fields.",
+      "Incorrectly setting 'first_name' instead of 'name' in User model."
+    ],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T19:28:31.159Z"
+  },
+  {
+    "owner": "Pranjal-3d",
+    "repo": "HealthCare_backened",
+    "branch": "main",
+    "path": "authentication/urls.py",
+    "summary": "No issues found in the code.",
+    "issues_found": [],
+    "has_fix": false,
+    "analyzed_at": "2026-03-25T19:28:31.159Z"
+  },
+  {
+    "owner": "Pranjal-3d",
+    "repo": "HealthCare_backened",
+    "branch": "main",
+    "path": "authentication/views.py",
+    "summary": "Fixed the incomplete code in the LoginView class by adding the authentication logic and returning a response with tokens.",
+    "issues_found": [
+      "Incomplete code in the LoginView class."
+    ],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T19:28:31.159Z"
+  },
+  {
+    "owner": "Arjun-3105",
+    "repo": "SIH-bluecarbon-backend",
+    "branch": "main",
+    "path": "config/db.js",
+    "summary": "The code is correct and does not require any changes.",
+    "issues_found": [],
+    "has_fix": false,
+    "analyzed_at": "2026-03-25T19:22:41.395Z"
+  },
+  {
+    "owner": "Arjun-3105",
+    "repo": "SIH-bluecarbon-backend",
+    "branch": "main",
+    "path": "config/setupCollection.js",
+    "summary": "The code is mostly correct but lacks error handling for the database connection and collection creation. Additionally, it should ensure that the environment variables are loaded correctly.",
+    "issues_found": [
+      "No error handling for connectDB() failure.",
+      "No check for the existence of MONGODB_URI before using it."
+    ],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T19:22:41.395Z"
+  },
+  {
+    "owner": "Arjun-3105",
+    "repo": "SIH-bluecarbon-backend",
+    "branch": "main",
+    "path": "controllers/adminController.js",
+    "summary": "Fixed a typo in the variable name 'ownerId' when accessing the 'stamp' object.",
+    "issues_found": [
+      {
+        "line": 38,
+        "issue": "Typo in variable name 'owne'. Should be 'ownerId'."
+      }
+    ],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T19:22:41.395Z"
+  },
+  {
+    "owner": "Arjun-3105",
+    "repo": "SIH-bluecarbon-backend",
+    "branch": "main",
+    "path": "controllers/blockchainController.js",
+    "summary": "Fixed incomplete response in the registerProject function.",
+    "issues_found": [
+      "The response in the registerProject function was cut off, missing the completion of the gasUsed field and the closing of the response object."
+    ],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T19:22:41.396Z"
+  },
+  {
+    "owner": "Arjun-3105",
+    "repo": "SIH-bluecarbon-backend",
+    "branch": "main",
+    "path": "controllers/dappController.js",
+    "summary": "Fixed incomplete code and ensured proper error handling.",
+    "issues_found": [
+      "The code was incomplete and cut off at the end."
+    ],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T19:22:41.396Z"
+  },
+  {
+    "owner": "Arjun-3105",
+    "repo": "SIH-blue-carbon",
+    "branch": "main",
+    "path": "next.config.ts",
+    "summary": "The landing page color change is not handled in the next.config.ts file. It should be addressed in the CSS or component files.",
+    "issues_found": [],
+    "has_fix": false,
+    "analyzed_at": "2026-03-25T18:39:18.418Z"
+  },
+  {
+    "owner": "Arjun-3105",
+    "repo": "SIH-blue-carbon",
+    "branch": "main",
+    "path": "src/app/auth/page.tsx",
+    "summary": "Changed the background color of the landing page.",
+    "issues_found": [],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T18:39:18.418Z"
+  },
+  {
+    "owner": "Arjun-3105",
+    "repo": "SIH-blue-carbon",
+    "branch": "main",
+    "path": "src/app/dashboard/Register/page.tsx",
+    "summary": "Changed the background color of the landing page to a light blue.",
+    "issues_found": [],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T18:39:18.418Z"
+  },
+  {
+    "owner": "Arjun-3105",
+    "repo": "SIH-blue-carbon",
+    "branch": "main",
+    "path": "src/app/dashboard/admin/page.tsx",
+    "summary": "Changed the background color of the landing page to improve aesthetics.",
+    "issues_found": [],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T18:39:18.418Z"
+  },
+  {
+    "owner": "Arjun-3105",
+    "repo": "SIH-blue-carbon",
+    "branch": "main",
+    "path": "src/app/dashboard/admin/queue/page.tsx",
+    "summary": "Changed the background color of the landing page to a new color.",
+    "issues_found": [],
+    "has_fix": true,
+    "analyzed_at": "2026-03-25T18:39:18.418Z"
+  }
+]
