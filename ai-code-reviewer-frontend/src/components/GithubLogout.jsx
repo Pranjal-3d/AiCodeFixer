@@ -9,7 +9,7 @@ export default function GithubLogout({ refresh, className = "" }) {
   return (
     <button
       onClick={handleLogout}
-      className={`text-slate-300 hover:text-white transition ${className}`}
+      className={`text-blue-500 hover:text-blue-700 transition ${className}`}
     >
       Logout
     </button>
