@@ -5,7 +5,7 @@ export default function GithubLogin({ className = "", label = "Login with GitHub
     <button
       type="button"
       onClick={loginGithub}
-      className={`flex items-center gap-2 text-white ${className}`}
+      className={`flex items-center gap-2 text-white bg-red-500 ${className}`}
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
