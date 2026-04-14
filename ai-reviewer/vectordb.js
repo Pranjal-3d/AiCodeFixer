@@ -7,7 +7,8 @@ function loadHistory() {
   try {
     if (!fs.existsSync(FILE)) return [];
     return JSON.parse(fs.readFileSync(FILE, "utf-8"));
-  } catch {
+  } catch (error) {
+    console.error("Error loading history:", error);
     return [];
   }
 }
