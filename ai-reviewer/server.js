@@ -21,9 +21,9 @@ const PORT = process.env.PORT || 5000;
 
 // ================= CONFIG =================
 
-const ALLOWED_EXTENSIONS = [".js", ".ts", ".tsx", ".py", ".jsx"];
-const MAX_ANALYZE_FILES = 5;
-const MAX_CONTENT_LENGTH = 1500;
+const BINARY_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip", ".exe", ".dll", ".so", ".bin", ".woff", ".woff2", ".ttf", ".eot", ".ico", ".svg"];
+const MAX_ANALYZE_FILES = 10;
+const MAX_CONTENT_LENGTH = 50000;
 
 let USER_GITHUB_TOKEN = null;
 let LAST_ANALYSIS = null;
@@ -85,7 +85,8 @@ function isValidCodeFile(path) {
   if (path.startsWith(".")) return false;
   if (path.includes("/.")) return false;
   if (path.includes("node_modules")) return false;
-  return ALLOWED_EXTENSIONS.some(ext => path.toLowerCase().endsWith(ext));
+  const isBinary = BINARY_EXTENSIONS.some(ext => path.toLowerCase().endsWith(ext));
+  return !isBinary;
 }
 
 async function fetchFileContent(owner, repo, branch, filePath) {
@@ -95,7 +96,49 @@ async function fetchFileContent(owner, repo, branch, filePath) {
     { headers: { Authorization: `token ${getGithubToken()}` } }
   );
   const full = Buffer.from(response.data.content, "base64").toString("utf-8");
-  return { full, preview: full.substring(0, MAX_CONTENT_LENGTH) };
+
+  // Create line-numbered version for AI context
+  const lines = full.split("\n");
+  const numbered = lines.map((line, idx) => `${idx + 1}: ${line}`).join("\n");
+  const preview = numbered.substring(0, MAX_CONTENT_LENGTH);
+
+  return { full, preview, totalLines: lines.length };
+}
+
+// ================= AI FILE SELECTION =================
+
+async function selectFilesWithAI(fileList, issueToFix) {
+  console.log(`   🤖 Asking AI to select relevant files for: "${issueToFix}"`);
+  const response = await openai.chat.completions.create({
+    model: "openai/gpt-4o-mini",
+    response_format: { type: "json_object" },
+    messages: [
+      {
+        role: "system",
+        content: "You are a senior engineer. Given a list of files in a repository and a user issue, identify which files (up to 10) are most likely to need changes. Return only JSON."
+      },
+      {
+        role: "user",
+        content: `User Issue: "${issueToFix}"
+        
+Files:
+${fileList.map(f => f.path).join("\n")}
+
+Return JSON:
+{
+  "selected_files": ["path/to/file1", "path/to/file2"]
+}
+`
+      }
+    ],
+    temperature: 0
+  });
+
+  const raw = response.choices[0].message.content;
+  const parsed = safeParse(raw);
+  const selected = parsed?.selected_files || [];
+  console.log(`   🤖 AI selected ${selected.length} files: ${selected.join(", ")}`);
+  return selected;
 }
 
 // ================= AI ANALYSIS =================
@@ -106,10 +149,13 @@ async function analyzeWithAI(filePath, content, issueToFix) {
     model: "openai/gpt-4o-mini",
     response_format: { type: "json_object" },
     messages: [
-      { role: "system", content: "You are a senior engineer. Return only JSON." },
+      {
+        role: "system",
+        content: "You are a senior engineer. You will receive code with line numbers (e.g., '1: line'). Analyze and fix the code according to the user request. You may also suggest new files that need to be created. Return only JSON."
+      },
       {
         role: "user",
-        content: `Fix the following code.
+        content: `Fix the following code. Use the provided line numbers for context, but do NOT include them in the output.
 
 Priority user request:
 ${issueToFix ? issueToFix : "No specific issue was provided. Fix the most important defects and code quality issues you can find."}
@@ -118,23 +164,24 @@ Return JSON:
 {
   "summary": "",
   "issues_found": [],
-  "fixed_code": ""
+  "fixed_code": "",
+  "new_files": []
 }
 
 Rules:
-- fixed_code must be the COMPLETE corrected file as plain text (no markdown fences).
-- If no changes are needed, return fixed_code as empty string "".
+- 'fixed_code' must be the COMPLETE corrected file as plain text (no markdown fences, no line numbers). If no changes needed, return "".
+- 'new_files' is an optional array of new files to create. Each item: { "path": "relative/path/to/file.ext", "content": "full file content here" }. Leave as [] if no new files are needed.
 
 File: ${filePath}
 
-Code:
+Code (with line numbers):
 ${content}`
       }
     ],
     temperature: 0.2
   });
   const raw = response.choices[0].message.content;
-  console.log(`   🤖 AI raw (first 300): ${raw.substring(0, 300)}`);
+  console.log(`   🤖 AI response for ${filePath} received.`);
   return raw;
 }
 
@@ -188,20 +235,42 @@ async function commitFile(owner, repo, branch, filePath, fixedContent, originalF
   if (fixedContent === originalFullContent) {
     return { skipped: true, reason: "unchanged" };
   }
-  const fileData = await axios.get(
-    `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`,
-    { headers: { Authorization: `token ${getGithubToken()}` } }
-  );
-  const sha = fileData.data.sha;
+
   const encoded = Buffer.from(fixedContent).toString("base64");
+  let sha = null;
+
+  // Try to get the existing file's SHA — if the file is new it won't exist (404)
+  try {
+    const fileData = await axios.get(
+      `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`,
+      { headers: { Authorization: `token ${getGithubToken()}` } }
+    );
+    sha = fileData.data.sha;
+  } catch (err) {
+    if (err.response?.status === 404) {
+      // File doesn't exist yet — we'll create it (no sha needed)
+      console.log(`   📄 New file detected: ${filePath} — will be created.`);
+    } else {
+      throw err; // Re-throw unexpected errors
+    }
+  }
+
+  const body = {
+    message: sha ? `AI Fix: Updated ${filePath}` : `AI Fix: Created ${filePath}`,
+    content: encoded,
+    branch,
+    ...(sha && { sha }) // only include sha when updating an existing file
+  };
+
   const putResponse = await axios.put(
     `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}`,
-    { message: `AI Fix: Updated ${filePath}`, content: encoded, branch, sha },
+    body,
     { headers: { Authorization: `token ${getGithubToken()}` } }
   );
   const commit = putResponse.data?.commit;
   return { skipped: false, commit: commit || null };
 }
+
 
 async function createPullRequest(owner, repo, baseBranch, newBranch) {
   const response = await axios.post(
@@ -239,6 +308,12 @@ app.get("/auth/github/callback", async (req, res) => {
       },
       { headers: { Accept: "application/json" } }
     );
+    
+    if (response.data.error) {
+      console.error("❌ GitHub OAuth response error:", response.data.error, response.data.error_description);
+      return res.redirect("http://localhost:5173/?github_login=error&error=" + response.data.error);
+    }
+
     USER_GITHUB_TOKEN = response.data.access_token;
     console.log(`✅ GitHub OAuth success. Token starts: ${USER_GITHUB_TOKEN?.substring(0, 8)}...`);
     res.redirect("http://localhost:5173/?github_login=success");
@@ -367,16 +442,42 @@ app.post("/analyze", async (req, res) => {
     const branch = await getDefaultBranch(owner, repo);
     const tree = await getRepoTree(owner, repo, branch);
 
-    let validFiles = tree.filter(f => f.type === "blob" && isValidCodeFile(f.path));
+    let allBlobs = tree.filter(f => f.type === "blob");
+    let validFiles = allBlobs.filter(f => isValidCodeFile(f.path));
 
-    // If frontend sent specific files, filter to those; otherwise auto-pick top 5
+    console.log(`📊 Tree stats: total blobs: ${allBlobs.length}, valid code files: ${validFiles.length}`);
+
+    if (validFiles.length === 0) {
+      return res.status(400).json({ error: "No valid code files found in the repository." });
+    }
+
+    // If frontend sent specific files, filter to those; 
+    // Otherwise use AI to pick the most relevant files from the repo
     if (Array.isArray(selected_files) && selected_files.length > 0) {
       validFiles = validFiles.filter(f => selected_files.includes(f.path));
     } else {
-      validFiles = validFiles.slice(0, MAX_ANALYZE_FILES);
+      const aiSelectedPaths = await selectFilesWithAI(validFiles, issue_to_fix);
+      if (aiSelectedPaths.length > 0) {
+        // Robust matching: trim, remove leading dots/slashes, handle case insensitivity if needed
+        const normalizedSelected = aiSelectedPaths.map(p => p.trim().replace(/^\.?\//, ""));
+        const filtered = validFiles.filter(f =>
+          normalizedSelected.includes(f.path) ||
+          normalizedSelected.some(sel => f.path.endsWith(sel))
+        );
+
+        if (filtered.length > 0) {
+          validFiles = filtered;
+        } else {
+          console.log(`⚠️  AI selected paths but none matched valid files. Falling back to top ${MAX_ANALYZE_FILES}.`);
+          validFiles = validFiles.slice(0, MAX_ANALYZE_FILES);
+        }
+      } else {
+        console.log(`⚠️  AI returned no selections. Falling back to top ${MAX_ANALYZE_FILES}.`);
+        validFiles = validFiles.slice(0, MAX_ANALYZE_FILES);
+      }
     }
 
-    console.log(`📋 Files selected for analysis: ${validFiles.length}`);
+    console.log(`📋 Files selected for analysis: ${validFiles.length} (${validFiles.map(v => v.path).join(", ")})`);
 
     const results = [];
 
@@ -390,13 +491,21 @@ app.post("/analyze", async (req, res) => {
         if (!parsed) { console.log(`❌ Could not parse AI JSON for: ${file.path}`); continue; }
 
         const fixedCode = normalizeFixedCode(parsed.fixed_code);
+
+        // Collect any new files the AI wants to create
+        const newFiles = Array.isArray(parsed.new_files)
+          ? parsed.new_files.filter(f => f && f.path && typeof f.content === 'string')
+          : [];
+        if (newFiles.length) console.log(`   📄 AI wants to create ${newFiles.length} new file(s): ${newFiles.map(f => f.path).join(', ')}`);
+
         results.push({
           path: file.path,
           summary: parsed.summary,
           issues_found: parsed.issues_found,
           fixed_code: fixedCode,
           full_original: full,
-          has_fix: !!fixedCode
+          has_fix: !!fixedCode,
+          new_files: newFiles
         });
       } catch (fileErr) {
         console.error(`❌ Error on ${file.path}: ${fileErr.message}`);
@@ -458,7 +567,21 @@ app.post("/create-pr", async (req, res) => {
       } catch (fileErr) {
         failed_files.push({ path: file.path, error: fileErr?.response?.data?.message || fileErr.message });
       }
+
+      // Commit any new files the AI suggested creating
+      if (Array.isArray(file.new_files)) {
+        for (const nf of file.new_files) {
+          try {
+            console.log(`   📄 Creating new file: ${nf.path}`);
+            const nfResult = await commitFile(owner, repo, newBranch, nf.path, nf.content, "__NEW_FILE__");
+            if (!nfResult?.skipped) committed_files.push({ path: nf.path, commit_sha: nfResult.commit?.sha || null, created: true });
+          } catch (nfErr) {
+            failed_files.push({ path: nf.path, error: nfErr?.response?.data?.message || nfErr.message });
+          }
+        }
+      }
     }
+
 
     if (!committed_files.length) {
       return res.status(400).json({
@@ -489,6 +612,48 @@ app.post("/create-pr", async (req, res) => {
   }
 });
 
+// ================= CHATBOT =================
+
+app.post("/chat", async (req, res) => {
+  const { message, history } = req.body;
+  if (!message) return res.status(400).json({ error: "Message required" });
+
+  try {
+    let context = "No code analysis context available yet.";
+    if (LAST_ANALYSIS) {
+      context = `You are "GitFix AI", an expert AI code review assistant.
+      Current Repository Context:
+      Repository: ${LAST_ANALYSIS.owner}/${LAST_ANALYSIS.repo}
+      Branch: ${LAST_ANALYSIS.branch}
+      
+      Latest Analysis & Automated Fixes:
+      ${LAST_ANALYSIS.results.map(r => `[File: ${r.path}]\n- Summary of changes: ${r.summary || "No summary"}\n- Issues identified: ${Array.isArray(r.issues_found) ? r.issues_found.join(", ") : (r.issues_found || "None")}`).join("\n\n")}
+      
+      Your Role:
+      1. If the user asks about the changes, expertly explain the summaries and the reasoning behind the fixes made.
+      2. If the user asks general questions about the repository or the defects, answer based on the context above.
+      3. Be highly helpful, technical, yet concise. Explain WHY certain issues are flagged and why the fixes address them.
+      4. Use Markdown formatting (code blocks, bullet points) to make your explanation readable.`;
+    }
+
+    const response = await openai.chat.completions.create({
+      model: "openai/gpt-4o-mini", // Switching to the same model used for analysis
+      messages: [
+        { role: "system", content: context },
+        ...(history || []),
+        { role: "user", content: message }
+      ],
+      temperature: 0.7
+    });
+
+    const reply = response.choices[0].message.content;
+    res.json({ reply });
+  } catch (err) {
+    console.error("❌ /chat failed:", err.message);
+    res.status(500).json({ error: "Chatbot error", details: err.message });
+  }
+});
+
 // ================= HISTORY =================
 
 // Returns all unique owner/repo pairs that have been analyzed
@@ -500,10 +665,12 @@ app.get("/history/repos", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-app.get("/history/repos", async (req, res) => {
+
+app.get("/history/search", async (req, res) => {
+  const { q } = req.query;
   try {
-    const repos = await getAvailableRepos();
-    res.json({ repos });
+    const results = await searchHistory(q || "");
+    res.json({ results });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
