@@ -1,10 +1,10 @@
-import { logoutGithub } from "../services/githubAuth"
+import { logoutGithub } from "../services/githubAuth";
 
 export default function GithubLogout({ refresh, className = "" }) {
   const handleLogout = async () => {
-    await logoutGithub()
-    if (refresh) await refresh()
-  }
+    await logoutGithub();
+    if (refresh) await refresh();
+  };
 
   return (
     <button
@@ -13,5 +13,5 @@ export default function GithubLogout({ refresh, className = "" }) {
     >
       Logout
     </button>
-  )
+  );
 }
