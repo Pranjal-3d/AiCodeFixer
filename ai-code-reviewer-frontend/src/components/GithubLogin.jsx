@@ -3,7 +3,7 @@ import { loginGithub } from "../services/githubAuth"
 export default function GithubLogin({ className = "", label = "Login with GitHub" }) {
   return (
     <button
-      type="button"
+      type="button1"
       onClick={loginGithub}
       className={`flex items-center gap-2 text-white ${className}`}
     >
