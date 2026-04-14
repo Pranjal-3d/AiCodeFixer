@@ -1,4 +1,4 @@
-import { loginGithub } from "../services/githubAuth"
+import { loginGithub } from "../services/githubAuth";
 
 export default function GithubLogin({ className = "", label = "Login with GitHub" }) {
   return (
@@ -17,5 +17,5 @@ export default function GithubLogin({ className = "", label = "Login with GitHub
       </svg>
       {label}
     </button>
-  )
+  );
 }
