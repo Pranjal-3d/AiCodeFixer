@@ -12,7 +12,6 @@ router.get("/github/login", (req, res) => {
     "&scope=repo";
 
   res.redirect(redirectUrl);
-
 });
 
 router.get("/github/callback", async (req, res) => {
