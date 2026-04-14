@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 5000;
 
 // ================= CONFIG =================
 
-const ALLOWED_EXTENSIONS = [".js", ".ts", ".tsx", ".py", ".jsx"];
+const ALLOWED_EXTENSIONS = [".js", ".ts", ".tsx", ".py", ".jsx"]; 
 const MAX_ANALYZE_FILES = 5;
 const MAX_CONTENT_LENGTH = 1500;
 
@@ -103,7 +103,7 @@ async function fetchFileContent(owner, repo, branch, filePath) {
 async function analyzeWithAI(filePath, content, issueToFix) {
   console.log(`   🤖 Sending to AI: ${filePath} (${content.length} chars)`);
   const response = await openai.chat.completions.create({
-    model: "openai/gpt-4o-mini",
+    model: "gpt-4",
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: "You are a senior engineer. Return only JSON." },
