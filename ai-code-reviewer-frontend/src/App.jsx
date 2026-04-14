@@ -314,10 +314,10 @@ export default function App() {
 
       await new Promise((r) => setTimeout(r, 800))
       setProgress(100)
-      addLog(fmt("SUCCESS", "Scan complete. Ready to deploy."))
+      addLog(fmt("SUCCESS", "Scan complete. Review the results above."))
+      addLog(fmt("INFO", "✅ Analysis done — click \"Push PR\" when you're ready to create a Pull Request for review."))
       setResult(res.data)
       setStatus("completed")
-      await createPullRequest(res.data, { auto: true })
     } catch (err) {
       addLog(fmt("WARN", "Error occurred during analysis."))
       if (err.response?.data?.error) addLog(fmt("INFO", `Server: ${err.response.data.error}`))
