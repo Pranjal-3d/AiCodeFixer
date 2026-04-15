@@ -1,10 +1,10 @@
-# gitfix 🔧
+# GitFix 🔧
 
 > AI-powered GitHub issue resolver — connect your repo, drop in an issue, and let gitfix fetch, scan, fix, commit, and merge automatically.
 
 ---
 
-## What is gitfix?
+## What is GitFix?
 
 **gitfix** is a CLI tool that automates the entire bug-fix lifecycle on GitHub. You authenticate with your GitHub account, paste an issue number, and gitfix takes over: it pulls the relevant files, scans every line for the problem, applies a fix, commits the change, and opens a pull request — all without you touching the code manually.
 
